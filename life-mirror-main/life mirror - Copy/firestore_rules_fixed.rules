@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+
+      // Follow requests
+      match /followRequests/{requestId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Notifications under user
+      match /notifications/{notificationId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Following under user - allow other users to add current user to their following list
+      match /following/{followingId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && (
+          request.auth.uid == userId || // User can write to their own following
+          request.auth.uid == followingId // User can add themselves to someone else's following
+        );
+      }
+
+      // Followers under user - allow other users to add current user to their followers list
+      match /followers/{followerId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && (
+          request.auth.uid == userId || // User can write to their own followers
+          request.auth.uid == followerId // User can add themselves to someone else's followers
+        );
+      }
+    }
+
+    // Posts
+    match /posts/{postId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Global follow requests
+    match /followRequests/{requestId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Global notifications (if used)
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+} 

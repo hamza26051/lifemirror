@@ -1,0 +1,174 @@
+# =============================================================================
+# Life Mirror - Development Docker Compose Configuration
+# =============================================================================
+# Development environment with hot-reload and debugging capabilities
+
+version: '3.8'
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  lifemirror-dev-network:
+    driver: bridge
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  lifemirror-dev-data:
+    driver: local
+  lifemirror-dev-logs:
+    driver: local
+
+# =============================================================================
+# SERVICES
+# =============================================================================
+services:
+  # =============================================================================
+  # DEVELOPMENT API SERVICE
+  # =============================================================================
+  lifemirror-api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: lifemirror-api-dev
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - FLASK_APP=lifemirror_api.py
+      - PYTHONPATH=/app
+      - HF_TOKEN=${HF_TOKEN:-your_huggingface_token}
+      - FACEPP_KEY=${FACEPP_KEY:-your_facepp_key}
+      - FACEPP_SECRET=${FACEPP_SECRET:-your_facepp_secret}
+      - OPENROUTER_KEY=${OPENROUTER_KEY:-your_openrouter_key}
+    volumes:
+      - .:/app
+      - lifemirror-dev-data:/app/uploads
+      - lifemirror-dev-logs:/app/logs
+      - /app/__pycache__
+      - /app/.pytest_cache
+    networks:
+      - lifemirror-dev-network
+    command: ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000", "--reload"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # =============================================================================
+  # DEVELOPMENT REDIS
+  # =============================================================================
+  redis-dev:
+    image: redis:7-alpine
+    container_name: lifemirror-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - lifemirror-dev-network
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # =============================================================================
+  # JUPYTER NOTEBOOK
+  # =============================================================================
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: lifemirror-jupyter
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=dev123
+    volumes:
+      - .:/app
+      - lifemirror-dev-data:/app/uploads
+    networks:
+      - lifemirror-dev-network
+    command: ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token=dev123"]
+
+  # =============================================================================
+  # TESTING SERVICE
+  # =============================================================================
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: lifemirror-test-runner
+    volumes:
+      - .:/app
+      - lifemirror-dev-data:/app/uploads
+    networks:
+      - lifemirror-dev-network
+    command: ["pytest", "-v", "--cov=.", "--cov-report=html"]
+    depends_on:
+      - lifemirror-api-dev
+
+  # =============================================================================
+  # CODE QUALITY SERVICE
+  # =============================================================================
+  code-quality:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: lifemirror-code-quality
+    volumes:
+      - .:/app
+    networks:
+      - lifemirror-dev-network
+    command: >
+      sh -c "
+        echo 'Running Black...' &&
+        black --check . &&
+        echo 'Running Flake8...' &&
+        flake8 . &&
+        echo 'Running isort...' &&
+        isort --check-only . &&
+        echo 'Running MyPy...' &&
+        mypy . &&
+        echo 'All code quality checks passed!'
+      "
+
+  # =============================================================================
+  # DEVELOPMENT NGINX
+  # =============================================================================
+  nginx-dev:
+    image: nginx:alpine
+    container_name: lifemirror-nginx-dev
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - lifemirror-dev-logs:/var/log/nginx
+    networks:
+      - lifemirror-dev-network
+    depends_on:
+      - lifemirror-api-dev
+
+# =============================================================================
+# ADDITIONAL VOLUMES
+# =============================================================================
+volumes:
+  redis-dev-data:
+    driver: local 

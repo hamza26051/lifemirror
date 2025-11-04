@@ -1,4 +1,4 @@
-# 🌟 Life Mirror - AI-Powered Self Analysis App
+## 🌟 Life Mirror - AI-Powered Self Analysis App
 
 Transform your selfies into comprehensive personal insights with cutting-edge AI technology.
 
